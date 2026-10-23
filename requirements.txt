@@ -1,0 +1,5 @@
+fastapi
+numpy
+scipy
+pillow
+vercel>=0.5

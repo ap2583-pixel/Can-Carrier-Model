@@ -1,2 +1,5 @@
 __pycache__/
 *_grid.png
+.vercel
+.env*
+dataset/

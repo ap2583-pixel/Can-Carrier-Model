@@ -84,6 +84,14 @@ per-stack counts and colours; "Scan another picture" resets. `--host 127.0.0.1`
 keeps it off the network. Code: `pipeline.py` (photo to result), `server.py`,
 `web/index.html`.
 
+## Hosted version (Vercel)
+
+Live at https://can-carrier-counter.vercel.app (`app.py` FastAPI, `public/index.html`,
+`requirements.txt`, `vercel.json`). Every photo, the model's output, and the optional
+real count the person types are saved to the private Blob store `can-carrier-captures`.
+An `ACCESS_CODE` env var gates uploads. Redeploy: `vercel deploy --prod`.
+Training data: `vercel env pull .env.local && python3 export_data.py` fills `dataset/`.
+
 ## Files
 
 `counter.py` pipeline · `stacks.py` stack regions · `reference.py` hand labels ·

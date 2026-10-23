@@ -74,8 +74,9 @@ def analyse(img, height=HEIGHT):
         ty = max(0, y0 - fs - 8)
         d.rectangle([x0, ty, x0 + tw + 12, ty + fs + 6], fill=(255, 0, 255, 235))
         d.text((x0 + 6, ty + 2), label, fill=(255, 255, 255, 255), font=font)
-        stacks.append(dict(id=len(stacks) + 1, count=len(slots), colours=dict(c.most_common())))
+        stacks.append(dict(id=len(stacks) + 1, count=len(slots), colours=dict(c.most_common()),
+                           box=[round(v) for v in (x0, y0, x1, y1)]))
     n = sum(total.values())
-    return dict(image=Image.alpha_composite(out, ov).convert('RGB'), stacks=stacks, total=n,
+    return dict(image=Image.alpha_composite(out, ov).convert('RGB'), size=list(img.size), stacks=stacks, total=n,
                 cans=4 * n, colours=dict(total.most_common()),
                 colour_rgb={k: PALETTE[k] for k in total})

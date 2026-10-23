@@ -1,0 +1,16 @@
+*.png
+*.jpg
+__pycache__
+.git
+test_scene_*
+results_*.json
+annotated.png
+server.py
+gen_test.py
+eval_scenes.py
+train_eval.py
+colour_eval.py
+annotate.py
+overlay.py
+reference.py
+export_data.py

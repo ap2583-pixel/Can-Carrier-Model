@@ -44,6 +44,11 @@
   .row { display:flex; gap:12px; margin-top:16px; flex-wrap:wrap; }
   .row > * { flex:1 1 180px; }
   .note { color:var(--mute); font-size:13px; margin-top:12px; }
+  .code { margin-bottom:14px; } .code input, .label input { font:inherit; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink); width:100%; }
+  .code label, .label label { display:block; font-weight:600; margin-bottom:6px; }
+  .label { margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
+  .label .line { display:flex; gap:10px; } .label .line input { flex:1; } .label .line button { padding:10px 18px; }
+  .fine { color:var(--mute); font-size:13px; margin:14px 0 0; }
   [hidden] { display:none !important; }
 </style>
 </head>
@@ -53,6 +58,10 @@
   <p class="sub">Photograph a shelf of can carriers. It finds each stack, counts the carriers and names their colours.</p>
 
   <section id="pick" class="card">
+    <div class="code" id="codebox" hidden>
+      <label for="code">Access code</label>
+      <input id="code" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Ask whoever sent you this link">
+    </div>
     <div class="actions">
       <label class="btn primary">Take a photo
         <input id="cam" type="file" accept="image/*" capture="environment">
@@ -62,6 +71,7 @@
       </label>
     </div>
     <div id="drop" class="drop">or drop an image here</div>
+    <p class="fine">Photos you take here are saved so they can be used to improve the counter. Please only photograph carriers and shelves, not people.</p>
     <ul class="tips">
       <li>Shoot straight on, with every stack fully in frame.</li>
       <li>Keep the carriers' side slots facing the camera and the light even.</li>
@@ -77,6 +87,11 @@
     <div class="total"><span class="n" id="total">0</span><span class="l">carriers · room for <b id="cans">0</b> cans</span></div>
     <div class="grid" id="stacks"></div>
     <div class="chips" id="chips"></div>
+    <div class="label" id="labelbox">
+      <label for="truth">Count them yourself? Enter the real number of carriers — it helps train the counter.</label>
+      <div class="line"><input id="truth" type="number" inputmode="numeric" min="0" max="5000" placeholder="Real total"><button id="send">Send</button></div>
+      <p class="fine" id="thanks" hidden>Thanks, saved.</p>
+    </div>
     <div class="row">
       <button class="primary" id="again">Scan another picture</button>
       <a class="btn" id="save" download="counted.jpg">Save annotated image</a>
@@ -89,6 +104,12 @@
 
 <script>
 const $ = id => document.getElementById(id);
+let current = null, codeNeeded = false;
+const store = { get(k){ try { return localStorage.getItem(k) || ''; } catch { return ''; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+const headers = () => (codeNeeded ? { 'X-Access-Code': $('code').value.trim() } : {});
+fetch('/api/config').then(r => r.json()).then(c => {
+  codeNeeded = c.code_required; $('codebox').hidden = !codeNeeded; $('code').value = store.get('code');
+}).catch(() => {});
 const show = name => { for (const s of ['pick','busy','out']) $(s).hidden = s !== name; };
 
 // Shrink big phone photos before upload; falls back to the original if the browser can't.
@@ -107,9 +128,11 @@ async function run(file) {
   if (!file) return;
   $('err').hidden = true; show('busy');
   try {
-    const res = await fetch('/analyze', { method:'POST', body: await prepare(file) });
+    if (codeNeeded && !$('code').value.trim()) throw new Error('Enter the access code first.');
+    store.set('code', $('code').value.trim());
+    const res = await fetch('/api/analyze', { method:'POST', headers: headers(), body: await prepare(file) });
     const r = await res.json();
-    if (!res.ok) throw new Error(r.error || 'Something went wrong.');
+    if (!res.ok) throw new Error(r.detail || r.error || 'Something went wrong.');
     render(r); show('out');
     $('out').scrollIntoView({ behavior:'smooth', block:'start' });
   } catch (e) {
@@ -118,6 +141,7 @@ async function run(file) {
 }
 
 function render(r) {
+  current = r.saved === false ? null : r.id; $('labelbox').hidden = !current; $('thanks').hidden = true; $('truth').value = '';
   $('pic').src = r.image; $('save').href = r.image;
   $('total').textContent = r.total; $('cans').textContent = r.cans;
   $('stacks').replaceChildren(...r.stacks.map(s => {
@@ -133,6 +157,12 @@ function render(r) {
 }
 
 for (const id of ['cam','file']) $(id).addEventListener('change', e => { run(e.target.files[0]); e.target.value = ''; });
+$('send').onclick = async () => {
+  const n = parseInt($('truth').value, 10);
+  if (!current || Number.isNaN(n)) return;
+  const res = await fetch('/api/label', { method:'POST', headers: { ...headers(), 'Content-Type':'application/json' }, body: JSON.stringify({ id: current, true_count: n }) });
+  if (res.ok) $('thanks').hidden = false;
+};
 $('again').onclick = () => { $('err').hidden = true; show('pick'); window.scrollTo({ top:0, behavior:'smooth' }); };
 const drop = $('drop');
 ['dragenter','dragover'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));

@@ -22,13 +22,18 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path == '/api/config':
+            return self._json(200, dict(code_required=False))
         if self.path.split('?')[0] in ('/', '/index.html'):
-            self._send(200, open(os.path.join(HERE, 'web', 'index.html'), 'rb').read(), 'text/html; charset=utf-8')
+            self._send(200, open(os.path.join(HERE, 'public', 'index.html'), 'rb').read(), 'text/html; charset=utf-8')
         else:
             self._send(404, b'not found', 'text/plain')
 
     def do_POST(self):
-        if self.path != '/analyze':
+        if self.path == '/api/label':      # local mode keeps nothing
+            self.rfile.read(int(self.headers.get('Content-Length') or 0))
+            return self._json(200, dict(ok=True))
+        if self.path not in ('/analyze', '/api/analyze'):
             return self._send(404, b'not found', 'text/plain')
         n = int(self.headers.get('Content-Length') or 0)
         if not 0 < n <= MAX_BYTES:
@@ -39,7 +44,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return self._json(400, dict(error="That file isn't an image I can read (try a JPG or PNG)."))
         try:
-            r = analyse(img)
+            r = analyse(img); r['id'] = 'local'; r['saved'] = False
         except Exception as e:
             return self._json(500, dict(error=f'Analysis failed: {e}'))
         buf = io.BytesIO(); r['image'].save(buf, 'JPEG', quality=88)
