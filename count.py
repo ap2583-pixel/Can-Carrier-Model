@@ -1,8 +1,8 @@
 """Count can carriers in a new shelf photo.
 
-  python3 count.py PHOTO                     # step 1: writes PHOTO_grid.png with
-                                             #   a pixel ruler and suggested boxes
-  python3 count.py PHOTO --box x0,y0,x1,y1 [--box ...]   # step 2: count
+  python3 count.py PHOTO                     # finds the stacks itself and counts
+  python3 count.py PHOTO --grid              # writes PHOTO_grid.png (pixel ruler + boxes)
+  python3 count.py PHOTO --box x0,y0,x1,y1 [--box ...]   # override the boxes by hand
 
 One --box per stack, in the photo's own pixel coordinates. Put the top edge on
 the top carrier and the bottom edge on the bottom carrier; the sides can be
@@ -13,7 +13,7 @@ from collections import Counter
 import numpy as np
 from PIL import Image, ImageDraw
 from counter import analyse_stack, KNNColour
-from autostack import find_boxes, refine
+from autostack import find_boxes, refine, auto_boxes, trim_ends
 from synth import PALETTE
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -41,25 +41,36 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('photo')
     ap.add_argument('--box', action='append', default=[], help='x0,y0,x1,y1 around one stack')
+    ap.add_argument('--grid', action='store_true', help='only write the ruler image with suggested boxes')
     ap.add_argument('--height', type=int, default=418,
                     help='photo is shrunk to this height first (the model was built at ~4-5 px per carrier)')
     a = ap.parse_args()
     img, small, s = load(a.photo, a.height)
-    if not a.box:
+    if a.grid:
         L = np.asarray(small).astype(float).mean(2)
-        out = grid(a.photo, img, find_boxes(L, 3.0), s)
-        print(f'No --box given. Open {out}, check or fix the red suggestions '
-              '(top edge on the top carrier, bottom edge on the bottom carrier), then rerun with --box.')
+        print('wrote', grid(a.photo, img, auto_boxes(np.asarray(small).astype(float))[0], s))
         return
+    boxes = [tuple(int(v) for v in b.split(',')) for b in a.box]
+    loose = False
+    if not boxes:
+        L = np.asarray(small).astype(float).mean(2)
+        found, loose = auto_boxes(np.asarray(small).astype(float))
+        boxes = [tuple(round(v / s) for v in b) for b in found]
+        if not boxes:
+            print('No stacks found; pass --box x0,y0,x1,y1 by hand (see --grid).')
+            return
+        print(f'auto-detected {len(boxes)} stack(s)')
     m = json.load(open(os.path.join(HERE, 'model.json')))
     knn = KNNColour(3).fit(np.array(m['rgb']), m['label'])
     rgb = np.asarray(small).astype(float); L = rgb.mean(2)
     out = img.copy(); d = ImageDraw.Draw(out)
     total = Counter()
-    for i, b in enumerate(a.box):
-        x0, y0, x1, y1 = [int(v) for v in b.split(',')]
+    for i, (x0, y0, x1, y1) in enumerate(boxes):
         st = refine(L, tuple(round(v * s) for v in (x0, y0, x1, y1)))
-        _, slots, cols = analyse_stack(rgb, st['slot'], st['solid'], st['top'], st['bottom'], *m['params'])
+        P, slots, cols = analyse_stack(rgb, st['slot'], st['solid'], st['top'], st['bottom'], *m['params'])
+        if not a.box and loose:
+            lo, hi = trim_ends(L, st['slot'], slots, P)
+            slots, cols = slots[lo:hi], cols[lo:hi]
         names = knn.predict(cols) if len(cols) else []
         c = Counter(list(names)); total.update(c)
         print(f'stack {i + 1}: {len(slots)} carriers  ' + ', '.join(f'{k} {v}' for k, v in c.most_common()))

@@ -57,14 +57,15 @@ a real held-out accuracy number.
 
 1. Install once: `pip install numpy pillow scipy`
 2. Take the photo straight on, with each stack fully in frame, like the first one.
-3. `python3 count.py my_photo.jpg` writes `my_photo_grid.png`: the photo with a
-   pixel ruler and red suggested boxes around the stacks.
-4. Check the boxes. Each one needs its top edge on the top carrier and its
-   bottom edge on the bottom carrier; the sides can be loose. Fix any that are
-   off by reading the ruler (or the pixel position your image viewer shows).
-5. `python3 count.py my_photo.jpg --box x0,y0,x1,y1 --box x0,y0,x1,y1 ...`
-   (one `--box` per stack) prints counts per stack and colour, and writes
-   `my_photo_counted.png` with every carrier marked.
+3. `python3 count.py my_photo.jpg` finds the stacks and sizes the boxes itself,
+   prints counts per stack and colour, and writes `my_photo_counted.png`.
+4. If a box is off, `python3 count.py my_photo.jpg --grid` writes `my_photo_grid.png`
+   (pixel ruler + the boxes it chose); then override with one
+   `--box x0,y0,x1,y1` per stack (top edge on the top carrier, bottom edge on the
+   bottom carrier, sides can be loose).
+
+Auto mode on the test photo: 124 total vs 121 (33/32/23/36 per stack vs 34/31/24/31). Stack edges are the weak point (the black stack especially), so
+expect up to ±3 per stack and check `_counted.png` on new photos.
 
 Notes: the photo is shrunk to 418 px tall first, because the model was tuned
 at 4-5 px per carrier; change it with `--height` if the stacks fill much more
@@ -73,6 +74,16 @@ changed the counts on the test photo by at most 1. Colours are learned from
 the first photo only, so different lighting will mostly hurt the colour split,
 not the count.
 
+## Web app
+
+`python3 server.py` (numpy/pillow/scipy only, nothing else to install), then open
+http://localhost:8000. On a phone on the same wifi open the `Phone:` address it
+prints: "Take a photo" opens the camera, "Choose an image" picks from the gallery,
+and on desktop you can drop a file. It shows the annotated picture, total,
+per-stack counts and colours; "Scan another picture" resets. `--host 127.0.0.1`
+keeps it off the network. Code: `pipeline.py` (photo to result), `server.py`,
+`web/index.html`.
+
 ## Files
 
 `counter.py` pipeline · `stacks.py` stack regions · `reference.py` hand labels ·
@@ -80,3 +91,12 @@ not the count.
 `colour_eval.py` colour scores · `annotate.py` draws `annotated.png` · `count.py` command line for new photos ·
 `autostack.py` box suggestions and slot/wall column finder · `model.json` tuned settings + colour examples.
 Run: `pip install numpy pillow`, then `python3 train_eval.py && python3 colour_eval.py && python3 annotate.py`.
+
+## Held-out check (`gen_test.py`, `eval_scenes.py`)
+
+`python3 eval_scenes.py 5001 40` renders 40 new synthetic shelf scenes (200 stacks,
+seeds never used for tuning), counts them with no hints, and scores against truth:
+all 200 stacks found, 77% exact, 90% within ±1, mean error 0.69, slight undercount. Caveat: the scene generator is the same one the counter was tuned on, so
+this tests the auto stack finder and the full pipeline, not real-photo
+generalisation. Only the one real photo is real; more labelled photos are still needed.
+Known failure: fine-pitch stacks (<4 px per carrier) sometimes get the wrong slot columns.
